@@ -1,139 +1,212 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 
-const CoinDetailsModal = ({ coin, onClose }) => {
+// Modal component to show coin details
+function CoinDetailsModal({ coin, onClose }) {
+  // Close on ESC key
+  useEffect(() => {
+    function handleEsc(e) {
+      if (e.key === 'Escape') onClose();
+    }
+    window.addEventListener('keydown', handleEsc);
+    // Disable background scroll
+    document.body.style.overflow = 'hidden';
+
+    return () => {
+      window.removeEventListener('keydown', handleEsc);
+      document.body.style.overflow = '';
+    };
+  }, [onClose]);
+
   if (!coin) return null;
+
   return (
     <div
-      style={{
-        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        display: 'flex', justifyContent: 'center', alignItems: 'center',
-        zIndex: 1050,
-      }}
       onClick={onClose}
+      style={{
+        position: 'fixed',
+        top: 0, left: 0, right: 0, bottom: 0,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 1000,
+      }}
+      aria-modal="true"
+      role="dialog"
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
-          backgroundColor: 'white',
-          padding: 20,
+          backgroundColor: '#fff',
+          padding: 24,
           borderRadius: 8,
-          width: 320,
-          boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
-          userSelect: 'none',
+          maxWidth: 400,
+          width: '90%',
+          boxShadow: '0 4px 15px rgba(0,0,0,0.3)',
+          textAlign: 'center',
         }}
-        onClick={e => e.stopPropagation()}
       >
-        <h5>{coin.name} ({coin.symbol.toUpperCase()})</h5>
-        <img src={coin.image} alt={coin.name} style={{ width: 50, height: 50 }} />
-        <p>Current Price: ${coin.current_price.toLocaleString()}</p>
-        <p>Market Cap: ${coin.market_cap.toLocaleString()}</p>
-        <p>24h Change: {coin.price_change_percentage_24h?.toFixed(2)}%</p>
-        <p>24h Volume: ${coin.total_volume.toLocaleString()}</p>
-        <button onClick={onClose} style={{ marginTop: 10 }}>Close</button>
+        <h2>{coin.name} ({coin.symbol.toUpperCase()})</h2>
+        <img
+          src={coin.image}
+          alt={coin.name}
+          width={80}
+          height={80}
+          style={{ borderRadius: '50%', margin: '20px 0' }}
+        />
+        <p><strong>Current Price:</strong> ${coin.current_price.toLocaleString()}</p>
+        <p><strong>Market Cap:</strong> ${coin.market_cap.toLocaleString()}</p>
+        <p><strong>24h Change:</strong> {coin.price_change_percentage_24h?.toFixed(2)}%</p>
+        <p><strong>24h Volume:</strong> ${coin.total_volume.toLocaleString()}</p>
+        <button
+          onClick={onClose}
+          style={{
+            marginTop: 20,
+            padding: '10px 18px',
+            backgroundColor: '#007bff',
+            border: 'none',
+            borderRadius: 6,
+            color: 'white',
+            cursor: 'pointer',
+            fontWeight: 'bold',
+          }}
+        >
+          Close
+        </button>
       </div>
     </div>
   );
-};
+}
 
-const BASE_URL = 'https://api.coingecko.com/api/v3';
-
-const CoinTable = () => {
+export default function CoinTable() {
   const coinsPerPage = 50;
-  const [coinsData, setCoinsData] = useState({});
+  const totalPages = 20;
+
+  const [coinsData, setCoinsData] = useState({}); // store pages data: { pageNum: [coins] }
   const [currentPage, setCurrentPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
   const [selectedCoin, setSelectedCoin] = useState(null);
 
-  const fetchCoinsPage = async (pageNumber) => {
-    setIsLoading(true);
-    try {
-      const response = await axios.get(`${BASE_URL}/coins/markets`, {
-        params: {
-          vs_currency: 'usd',
-          order: 'market_cap_desc',
-          per_page: coinsPerPage,
-          page: pageNumber,
-          price_change_percentage: '24h',
-        },
-      });
-      const data = response.data;
-      if (!Array.isArray(data)) throw new Error('Invalid response');
-
-      setCoinsData(prev => ({
-        ...prev,
-        [pageNumber]: data,
-      }));
-      setIsLoading(false);
-      setError(null);
-    } catch (err) {
-      setError('Failed to load coins');
-      setIsLoading(false);
-    }
-  };
-
+  // Fetch coins from API for a page
   useEffect(() => {
-    if (!coinsData[currentPage]) fetchCoinsPage(currentPage);
+    async function fetchPage(page) {
+      if (coinsData[page]) return; // already loaded
+      setLoading(true);
+      setError(null);
+
+      try {
+        const res = await axios.get('https://api.coingecko.com/api/v3/coins/markets', {
+          params: {
+            vs_currency: 'usd',
+            order: 'market_cap_desc',
+            per_page: coinsPerPage,
+            page,
+            price_change_percentage: '24h',
+          },
+        });
+        setCoinsData((prev) => ({ ...prev, [page]: res.data }));
+      } catch (e) {
+        setError('Failed to fetch coins. Please try again.');
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchPage(currentPage);
   }, [currentPage, coinsData]);
 
+  // Get current page coins or empty
   const currentCoins = coinsData[currentPage] || [];
 
-  const filteredCoins = currentCoins.filter(coin => {
-    const term = searchTerm.toLowerCase();
-    return coin.name.toLowerCase().includes(term) || coin.symbol.toLowerCase().includes(term);
-  });
+  // Filter coins by search term
+  const filteredCoins = currentCoins.filter((coin) =>
+    coin.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    coin.symbol.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
-  const sortedCoins = React.useMemo(() => {
+  // Sort coins by selected key and direction
+  const sortedCoins = useMemo(() => {
     if (!sortConfig.key) return filteredCoins;
 
-    return [...filteredCoins].sort((a, b) => {
-      let aVal = a[sortConfig.key] ?? '';
-      let bVal = b[sortConfig.key] ?? '';
+    const sorted = [...filteredCoins].sort((a, b) => {
+      let aVal = a[sortConfig.key];
+      let bVal = b[sortConfig.key];
 
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
-      }
+      // Handle null/undefined
+      if (aVal === null || aVal === undefined) aVal = '';
+      if (bVal === null || bVal === undefined) bVal = '';
+
+      // If string, compare case-insensitive
+      if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+      if (typeof bVal === 'string') bVal = bVal.toLowerCase();
 
       if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
       if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
       return 0;
     });
+
+    return sorted;
   }, [filteredCoins, sortConfig]);
 
-  const requestSort = (key) => {
+  // Sorting handler
+  function handleSort(key) {
     let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
     setSortConfig({ key, direction });
-  };
+  }
 
-  const totalPages = 20;
-
-  const handlePageClick = (page) => {
+  // Pagination handlers
+  function goToPage(page) {
     if (page < 1 || page > totalPages) return;
     setCurrentPage(page);
     setSearchTerm('');
     setSortConfig({ key: null, direction: 'asc' });
-  };
+  }
 
-  const getSortArrow = (key) => {
-    if (sortConfig.key !== key) return null;
+  function getSortArrow(key) {
+    if (sortConfig.key !== key) return '';
     return sortConfig.direction === 'asc' ? '▲' : '▼';
-  };
+  }
 
   return (
-    <div style={{ maxWidth: 1000, margin: '40px auto', padding: 20, backgroundColor: '#fff', borderRadius: 12, boxShadow: '0 6px 15px rgba(0,0,0,0.1)' }}>
-      {error && <div style={{ marginBottom: 12, color: 'red' }}>{error}</div>}
+    <div
+      style={{
+        maxWidth: 1000,
+        margin: '40px auto',
+        padding: 20,
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        boxShadow: '0 6px 15px rgba(0,0,0,0.1)',
+        fontFamily: 'Arial, sans-serif',
+      }}
+    >
+      <h1 style={{ textAlign: 'center', marginBottom: 20 }}>Cryptocurrency Prices</h1>
+
+      {error && (
+        <div
+          style={{
+            color: 'red',
+            marginBottom: 12,
+            textAlign: 'center',
+            fontWeight: 'bold',
+          }}
+        >
+          {error}
+        </div>
+      )}
 
       <input
-        type="text"
+        type="search"
         placeholder="Search by name or symbol..."
         value={searchTerm}
-        onChange={e => setSearchTerm(e.target.value)}
+        onChange={(e) => setSearchTerm(e.target.value)}
         style={{
           width: '100%',
           padding: 10,
@@ -145,53 +218,78 @@ const CoinTable = () => {
       />
 
       {/* Table Header */}
-      <div style={{ display: 'flex', fontWeight: '600', borderBottom: '2px solid #eee', paddingBottom: 10, userSelect: 'none' }}>
+      <div
+        style={{
+          display: 'flex',
+          fontWeight: '700',
+          borderBottom: '2px solid #eee',
+          paddingBottom: 10,
+          userSelect: 'none',
+        }}
+      >
         <div style={{ flexBasis: 40, textAlign: 'center' }}>#</div>
+
         <div
-          onClick={() => requestSort('name')}
+          onClick={() => handleSort('name')}
           style={{ flexBasis: 240, cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+          title="Sort by Name"
         >
           Name&nbsp;{getSortArrow('name')}
         </div>
+
         <div
-          onClick={() => requestSort('current_price')}
+          onClick={() => handleSort('current_price')}
           style={{ flexBasis: 130, textAlign: 'right', paddingLeft: 20, cursor: 'pointer' }}
+          title="Sort by Price"
         >
           Price&nbsp;{getSortArrow('current_price')}
         </div>
+
         <div
-          onClick={() => requestSort('price_change_percentage_24h')}
+          onClick={() => handleSort('price_change_percentage_24h')}
           style={{ flexBasis: 110, textAlign: 'right', cursor: 'pointer' }}
+          title="Sort by 24h Change"
         >
           24h Change&nbsp;{getSortArrow('price_change_percentage_24h')}
         </div>
+
         <div
-          onClick={() => requestSort('total_volume')}
+          onClick={() => handleSort('total_volume')}
           style={{ flexBasis: 130, textAlign: 'right', cursor: 'pointer' }}
+          title="Sort by 24h Volume"
         >
           24h Volume&nbsp;{getSortArrow('total_volume')}
         </div>
+
         <div
-          onClick={() => requestSort('market_cap')}
+          onClick={() => handleSort('market_cap')}
           style={{ flexBasis: 150, textAlign: 'right', paddingLeft: 20, cursor: 'pointer' }}
+          title="Sort by Market Cap"
         >
           Market Cap&nbsp;{getSortArrow('market_cap')}
         </div>
       </div>
 
       {/* Table Body */}
-      <div style={{ maxHeight: 650, overflowY: 'auto', marginTop: 10 }}>
-        {isLoading ? (
+      <div
+        style={{
+          maxHeight: 650,
+          overflowY: 'auto',
+          marginTop: 10,
+        }}
+      >
+        {loading ? (
           <div style={{ padding: 20, textAlign: 'center' }}>Loading...</div>
         ) : sortedCoins.length === 0 ? (
           <div style={{ padding: 20, textAlign: 'center' }}>No coins found.</div>
         ) : (
-          sortedCoins.map((coin, index) => {
+          sortedCoins.map((coin, idx) => {
             const isPositive = coin.price_change_percentage_24h >= 0;
             return (
               <div
                 key={coin.id}
                 onClick={() => setSelectedCoin(coin)}
+                title={`Click for details on ${coin.name}`}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -199,25 +297,61 @@ const CoinTable = () => {
                   borderBottom: '1px solid #eee',
                   cursor: 'pointer',
                 }}
-                title={`Click to view details for ${coin.name}`}
               >
                 <div style={{ flexBasis: 40, textAlign: 'center', fontWeight: 600 }}>
-                  {(currentPage - 1) * coinsPerPage + index + 1}
+                  {(currentPage - 1) * coinsPerPage + idx + 1}
                 </div>
 
-                <div style={{ flexBasis: 240, display: 'flex', alignItems: 'center', gap: 12, textAlign: 'left' }}>
-                  <img src={coin.image} alt={coin.name} width={30} height={30} style={{ borderRadius: '50%' }} />
+                <div
+                  style={{
+                    flexBasis: 240,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    textAlign: 'left',
+                  }}
+                >
+                  <img
+                    src={coin.image}
+                    alt={coin.name}
+                    width={30}
+                    height={30}
+                    style={{ borderRadius: '50%' }}
+                    loading="lazy"
+                  />
                   <div>
                     <div style={{ fontWeight: 600 }}>{coin.name}</div>
-                    <div style={{ fontSize: 12, color: '#777', textTransform: 'uppercase' }}>{coin.symbol}</div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: '#777',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {coin.symbol}
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ flexBasis: 130, textAlign: 'right', paddingLeft: 20, fontWeight: 600 }}>
+                <div
+                  style={{
+                    flexBasis: 130,
+                    textAlign: 'right',
+                    paddingLeft: 20,
+                    fontWeight: 600,
+                  }}
+                >
                   ${coin.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
 
-                <div style={{ flexBasis: 110, textAlign: 'right', color: isPositive ? 'green' : 'red', fontWeight: 600 }}>
+                <div
+                  style={{
+                    flexBasis: 110,
+                    textAlign: 'right',
+                    color: isPositive ? 'green' : 'red',
+                    fontWeight: 600,
+                  }}
+                >
                   {coin.price_change_percentage_24h?.toFixed(2)}%
                 </div>
 
@@ -225,7 +359,14 @@ const CoinTable = () => {
                   ${coin.total_volume.toLocaleString()}
                 </div>
 
-                <div style={{ flexBasis: 150, textAlign: 'right', paddingLeft: 20, fontWeight: 600 }}>
+                <div
+                  style={{
+                    flexBasis: 150,
+                    textAlign: 'right',
+                    paddingLeft: 20,
+                    fontWeight: 600,
+                  }}
+                >
                   ${coin.market_cap.toLocaleString()}
                 </div>
               </div>
@@ -235,9 +376,17 @@ const CoinTable = () => {
       </div>
 
       {/* Pagination */}
-      <div style={{ marginTop: 20, display: 'flex', justifyContent: 'center', flexWrap: 'wrap', gap: 6 }}>
+      <div
+        style={{
+          marginTop: 20,
+          display: 'flex',
+          justifyContent: 'center',
+          flexWrap: 'wrap',
+          gap: 6,
+        }}
+      >
         <button
-          onClick={() => handlePageClick(currentPage - 1)}
+          onClick={() => goToPage(currentPage - 1)}
           disabled={currentPage === 1}
           style={{
             padding: '6px 12px',
@@ -246,13 +395,16 @@ const CoinTable = () => {
             backgroundColor: currentPage === 1 ? '#eee' : '#fff',
             cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
           }}
+          aria-label="Previous page"
         >
           Previous
         </button>
-        {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+
+        {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
           <button
             key={page}
-            onClick={() => handlePageClick(page)}
+            onClick={() => goToPage(page)}
+            aria-current={page === currentPage ? 'page' : undefined}
             style={{
               padding: '6px 12px',
               borderRadius: 4,
@@ -265,8 +417,9 @@ const CoinTable = () => {
             {page}
           </button>
         ))}
+
         <button
-          onClick={() => handlePageClick(currentPage + 1)}
+          onClick={() => goToPage(currentPage + 1)}
           disabled={currentPage === totalPages}
           style={{
             padding: '6px 12px',
@@ -275,14 +428,16 @@ const CoinTable = () => {
             backgroundColor: currentPage === totalPages ? '#eee' : '#fff',
             cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
           }}
+          aria-label="Next page"
         >
           Next
         </button>
       </div>
 
-      {selectedCoin && <CoinDetailsModal coin={selectedCoin} onClose={() => setSelectedCoin(null)} />}
+      {/* Modal */}
+      {selectedCoin && (
+        <CoinDetailsModal coin={selectedCoin} onClose={() => setSelectedCoin(null)} />
+      )}
     </div>
   );
-};
-
-export default CoinTable;
+}
