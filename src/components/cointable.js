@@ -10,7 +10,7 @@ const CoinTable = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [totalCoins, setTotalCoins] = useState(null); // if API gives total, else guess
+  
 
   const fetchCoinsPage = async (pageNumber) => {
     setIsLoading(true);
