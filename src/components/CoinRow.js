@@ -1,12 +1,11 @@
-// src/components/CoinRow.jsx
 import React from 'react';
 
 const CoinRow = ({ coin, index }) => {
   const isPositive = coin.price_change_percentage_24h >= 0;
 
   return (
-    <tr>
-      <td>{index + 1}</td>
+    <>
+      <td>{index }</td>
       <td>
         <img src={coin.image} alt={coin.name} width="20" className="me-2" />
         {coin.name} ({coin.symbol.toUpperCase()})
@@ -17,7 +16,7 @@ const CoinRow = ({ coin, index }) => {
       </td>
       <td>${coin.total_volume.toLocaleString()}</td>
       <td>${coin.market_cap.toLocaleString()}</td>
-    </tr>
+    </>
   );
 };
 
